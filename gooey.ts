@@ -4,7 +4,8 @@ import {
   command,
   CommandContext,
   GatewayIntents,
-  Message
+  Message,
+  PermissionFlags
 } from './deps.ts'
 
 /*
@@ -67,33 +68,144 @@ const speak = () => {
     return gibberish.join(" ");
 }
 
+type WatchedChannel = { 
+    channel: string,
+    regex: string
+};
+
+type GooeyAction = "reply" | "remove" | "give"
+type GooeyTrigger = { regex: RegExp, action: GooeyAction, arg: string, channel: string }
 
 class Gooey extends CommandClient {
+    static watchedChannels: Map<string,GooeyTrigger> = new Map();
+
+
     constructor() {
         super({
-            prefix: ["hey gooey ", "hey gooey, "],
-            caseSensitive: false
+            prefix: ["hey gooey "],
+            caseSensitive: false,
         });
     }
+
 
     @event()
     ready(): void {
         console.log(`Logged in as ${this.user?.tag}!`);
+        Gooey.watchedChannels = new Map();
     }
+
 
     @event()
     messageCreate(msg: Message): void {
-        if (msg.author.id !== this.user?.id) {
-            if (msg.content.toLowerCase().startsWith("hey gooey")){
-                msg.channel.send(speak());
+        // Ignore messages from myself
+        if (msg.author.id === this.user?.id) 
+            return
+
+
+        if (msg.content.toLowerCase() === "hey gooey"){
+            msg.channel.send(speak());
+        }    
+
+        for (const [_, trigger] of Gooey.watchedChannels) {
+            console.log(trigger);
+            if (msg.channelID === trigger.channel && msg.content.match(trigger.regex)){
+                switch (trigger.action) {
+                    case "give":
+                        msg.member?.roles.add(trigger.arg);
+                        msg.reply("Goop goop!")
+                        break;
+
+                    case "remove":
+                        msg.member?.roles.remove(trigger.arg);
+                        msg.reply("Gloop gloop~ *absorbs your role*")
+                        break;
+                    
+                    case "reply":
+                        msg.reply(trigger.arg);
+                        break;
+                }
             }
         }
+
+        console.log(Gooey.watchedChannels);
+        console.log(`echo: ${msg.content}`);
+        console.log(`echo: ${msg.channelID}`)
     }
     
-    @command()
-    speak(ctx: CommandContext): void {
+
+    @command({name: "speak"})
+    Speak(ctx: CommandContext): void {
         ctx.channel.send(speak());
     }
+
+
+    /*
+        Formate:
+            Hey gooey, when [regex] in [channel] reply [message]
+            Hey gooey, when [regex] in [channel] [remove|give] [role]
+    */
+    @command({name: "when", userPermissions: ["ADMINISTRATOR"]})
+    async when(ctx: CommandContext): Promise<void> {
+        const message = ctx.message.content;
+        const result = message.match(/[HEYGOheygo ,]* when (.+) in \<\#([0-9]+)\> (remove|reply|give) (.+)/);
+
+        if (result === null) {
+           ctx.channel.send("Gooey? (Request isn't in correct formate...)")
+            return;
+        }
+        
+        const regex_str = result[1];
+        const channel_id = result[2];
+        const action = result[3];
+        let argument = result[4];
+
+        let regex: RegExp|null = null;
+        try {
+            regex = new RegExp(`^${regex_str}$`);
+        } catch (_) {
+            ctx.channel.send("Gooey? (This regex is broken...)");
+            return;
+        }
+
+        const guild = ctx.guild;
+        if (!await guild?.channels.get(channel_id)) {
+            ctx.channel.send(`Gooey? (I can't find any channel with ${channel_id}...)`);
+            return;
+        }
+
+        if (action === "give" || action === "remove") {
+            argument = argument.match(/<@&([0-9]+)>/)![1];
+            
+            if (!await guild?.roles.get(argument)) {
+                ctx.channel.send(`Gooey? (I can't find any role with ${argument}...)`);
+                return;
+            }
+        } 
+        
+
+        await ctx.channel.send("Gooey!");
+        Gooey.watchedChannels.set(`${regex_str}:${channel_id}:${action}`, {
+            regex: regex,
+            action: action as GooeyAction,
+            arg: argument,
+            channel: channel_id
+        });
+    }
+
+    /*
+        Forms:
+            hey gooey what is your todo list?
+    */
+    @command({name: "what"})
+    async what(ctx: CommandContext): Promise<void> {
+
+    }
+
+    @command({name: "stop"})
+    async stop(ctx: CommandContext): Promise<void> {
+
+    }
+
 }
 
 

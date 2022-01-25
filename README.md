@@ -13,7 +13,9 @@ Some basic task Gooey can do:
 
 - [x] Speaks to you when you say "hey gooey".
 - [ ] Knows how to create role menus.
-- [ ] Knows how to varify people's age using RegEx
+- [x] Knows how to varify people's age using RegEx
+- [x] Knows how to give/take roles on command
+- [ ] You can tell Gooey to stop doing task.
 
 # Development
 
